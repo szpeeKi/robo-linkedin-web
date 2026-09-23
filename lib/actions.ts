@@ -8,16 +8,64 @@ import { LIMITE_CARACTERES_POST } from "@/lib/constantes";
 
 export type EstadoAcao = { erro?: string; sucesso?: string } | null;
 
+const BUCKET_IMAGENS = "linkedin-imagens";
+const TAMANHO_MAXIMO_IMAGEM = 8 * 1024 * 1024; // 8 MB
+
+// Sobe o arquivo escolhido pro Storage e devolve a URL pública. Usa o client
+// admin (service_role) porque é o mesmo padrão já usado em
+// salvarCredencialLinkedin — não depende de nenhuma policy de RLS do bucket
+// estar configurada certinho.
+async function enviarImagem(
+  arquivo: File
+): Promise<{ erro: string } | { url: string }> {
+  if (arquivo.size > TAMANHO_MAXIMO_IMAGEM) {
+    return { erro: "A imagem escolhida passa de 8 MB. Escolha uma menor." };
+  }
+  if (!arquivo.type.startsWith("image/")) {
+    return { erro: "O arquivo escolhido não parece ser uma imagem." };
+  }
+
+  const extensao = arquivo.name.includes(".")
+    ? arquivo.name.slice(arquivo.name.lastIndexOf("."))
+    : "";
+  const nomeArquivo = `${crypto.randomUUID()}${extensao}`;
+
+  const admin = createSupabaseAdminClient();
+  const { error } = await admin.storage
+    .from(BUCKET_IMAGENS)
+    .upload(nomeArquivo, arquivo, { contentType: arquivo.type });
+
+  if (error) {
+    return { erro: `Não consegui enviar a imagem: ${error.message}` };
+  }
+
+  const { data } = admin.storage.from(BUCKET_IMAGENS).getPublicUrl(nomeArquivo);
+  return { url: data.publicUrl };
+}
+
 // Lê e valida os campos de texto/imagem/data/hora que o formulário de post
 // (criar e editar) manda. Compartilhado pelas duas actions abaixo pra manter
 // as mesmas regras (limite de caracteres, fuso horário) num lugar só.
-function lerCamposDoFormulario(
+//
+// A imagem pode vir de duas formas — um link colado ou um arquivo escolhido
+// do computador — e as duas viram a mesma coisa no fim (uma URL salva em
+// "imagem_url"); o arquivo, se escolhido, tem prioridade sobre o link.
+async function lerCamposDoFormulario(
   formData: FormData
-): { erro: string } | { texto: string; imagemUrl: string; agendadoParaUtc: Date } {
+): Promise<
+  { erro: string } | { texto: string; imagemUrl: string; agendadoParaUtc: Date }
+> {
   const texto = String(formData.get("texto") ?? "").trim();
-  const imagemUrl = String(formData.get("imagem_url") ?? "").trim();
+  let imagemUrl = String(formData.get("imagem_url") ?? "").trim();
   const dataAgendada = String(formData.get("data_agendada") ?? "");
   const horaAgendada = String(formData.get("hora_agendada") ?? "");
+
+  const arquivoImagem = formData.get("imagem_arquivo");
+  if (arquivoImagem instanceof File && arquivoImagem.size > 0) {
+    const resultado = await enviarImagem(arquivoImagem);
+    if ("erro" in resultado) return resultado;
+    imagemUrl = resultado.url;
+  }
 
   if (!texto) {
     return { erro: "Escreva o texto do post antes de salvar." };
@@ -59,7 +107,7 @@ export async function criarPost(
     return { erro: "Sua sessão expirou. Atualize a página e entre de novo." };
   }
 
-  const campos = lerCamposDoFormulario(formData);
+  const campos = await lerCamposDoFormulario(formData);
   if ("erro" in campos) return campos;
 
   const { error } = await supabase.from("linkedin_posts_agendados").insert({
@@ -96,7 +144,7 @@ export async function editarPost(
     return { erro: "Post inválido." };
   }
 
-  const campos = lerCamposDoFormulario(formData);
+  const campos = await lerCamposDoFormulario(formData);
   if ("erro" in campos) return campos;
 
   const { error, count } = await supabase

@@ -63,14 +63,28 @@ export function FormularioPost({
         />
       </Campo>
 
-      <Campo label="Link da imagem (opcional)">
+      <Campo label="Imagem do post (opcional)">
         <input
           type="url"
           name="imagem_url"
           defaultValue={valoresIniciais?.imagem_url ?? ""}
           className={classesCampo}
-          placeholder="https://..."
+          placeholder="Cole um link (https://...)"
         />
+        <div className="flex items-center gap-3 py-1">
+          <span className="h-px flex-1 bg-gray-200" />
+          <span className="text-xs text-gray-400">ou</span>
+          <span className="h-px flex-1 bg-gray-200" />
+        </div>
+        <input
+          type="file"
+          name="imagem_arquivo"
+          accept="image/*"
+          className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-gray-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-gray-700 hover:file:bg-gray-200"
+        />
+        <p className="text-xs text-gray-400">
+          Escolher um arquivo do computador substitui o link colado acima.
+        </p>
       </Campo>
 
       <div className="grid grid-cols-2 gap-4">
