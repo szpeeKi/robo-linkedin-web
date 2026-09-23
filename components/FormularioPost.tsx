@@ -5,8 +5,13 @@ import { BotaoEnviar } from "@/components/BotaoEnviar";
 import { MensagemAcao } from "@/components/MensagemAcao";
 import { Campo } from "@/components/Campo";
 import { classesCampo } from "@/lib/ui";
-import { LIMITE_CARACTERES_POST } from "@/lib/constantes";
-import type { EstadoAcao } from "@/lib/actions";
+import {
+  BUCKET_MIDIAS,
+  LIMITE_CARACTERES_POST,
+  urlEhVideo,
+} from "@/lib/constantes";
+import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { prepararUploadDeMidia, type EstadoAcao } from "@/lib/actions";
 
 export type ValoresIniciaisPost = {
   id: string;
@@ -29,6 +34,54 @@ export function FormularioPost({
 }) {
   const [estado, formAction] = useActionState(acao, null);
   const [texto, setTexto] = useState(valoresIniciais?.texto ?? "");
+  const [urlMidia, setUrlMidia] = useState(valoresIniciais?.imagem_url ?? "");
+  const [enviandoMidia, setEnviandoMidia] = useState(false);
+  const [erroMidia, setErroMidia] = useState<string | null>(null);
+  const [nomeArquivoEnviado, setNomeArquivoEnviado] = useState<string | null>(
+    null
+  );
+
+  // Manda o arquivo escolhido direto pro Storage (ver prepararUploadDeMidia) e
+  // preenche o campo de link com a URL final — o resto do formulário só enxerga
+  // uma URL, seja ela colada ou vinda de um arquivo enviado.
+  async function aoEscolherArquivo(e: React.ChangeEvent<HTMLInputElement>) {
+    const input = e.currentTarget;
+    const arquivo = input.files?.[0];
+    if (!arquivo) return;
+
+    setErroMidia(null);
+    setNomeArquivoEnviado(null);
+    setEnviandoMidia(true);
+    try {
+      const preparo = await prepararUploadDeMidia({
+        nome: arquivo.name,
+        tipo: arquivo.type,
+        tamanho: arquivo.size,
+      });
+      if ("erro" in preparo) {
+        setErroMidia(preparo.erro);
+        return;
+      }
+
+      const { error } = await createSupabaseBrowserClient()
+        .storage.from(BUCKET_MIDIAS)
+        .uploadToSignedUrl(preparo.caminho, preparo.token, arquivo, {
+          contentType: arquivo.type,
+        });
+      if (error) {
+        setErroMidia(`Não consegui enviar o arquivo: ${error.message}`);
+        return;
+      }
+
+      setUrlMidia(preparo.urlPublica);
+      setNomeArquivoEnviado(arquivo.name);
+    } catch {
+      setErroMidia("Não consegui enviar o arquivo. Tente de novo.");
+    } finally {
+      setEnviandoMidia(false);
+      input.value = ""; // permite escolher o mesmo arquivo de novo se precisar
+    }
+  }
 
   const hoje = new Date().toISOString().slice(0, 10);
   const restantes = LIMITE_CARACTERES_POST - texto.length;
@@ -63,13 +116,17 @@ export function FormularioPost({
         />
       </Campo>
 
-      <Campo label="Imagem do post (opcional)">
+      <Campo label="Foto ou vídeo do post (opcional)">
         <input
           type="url"
           name="imagem_url"
-          defaultValue={valoresIniciais?.imagem_url ?? ""}
+          value={urlMidia}
+          onChange={(e) => {
+            setUrlMidia(e.target.value);
+            setNomeArquivoEnviado(null);
+          }}
           className={classesCampo}
-          placeholder="Cole um link (https://...)"
+          placeholder="Cole o link direto do arquivo (https://...)"
         />
         <div className="flex items-center gap-3 py-1">
           <span className="h-px flex-1 bg-gray-200" />
@@ -78,13 +135,44 @@ export function FormularioPost({
         </div>
         <input
           type="file"
-          name="imagem_arquivo"
-          accept="image/*"
-          className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-gray-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-gray-700 hover:file:bg-gray-200"
+          accept="image/*,video/*"
+          onChange={aoEscolherArquivo}
+          disabled={enviandoMidia}
+          className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-gray-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-gray-700 hover:file:bg-gray-200 disabled:opacity-60"
         />
-        <p className="text-xs text-gray-400">
-          Escolher um arquivo do computador substitui o link colado acima.
-        </p>
+        {enviandoMidia ? (
+          <p className="text-xs text-gray-500">
+            Enviando o arquivo... vídeos grandes podem demorar um pouco. Não
+            feche essa página.
+          </p>
+        ) : nomeArquivoEnviado ? (
+          <p className="text-xs text-green-700">
+            Arquivo enviado: {nomeArquivoEnviado}
+          </p>
+        ) : (
+          <p className="text-xs text-gray-400">
+            Fotos até 8 MB e vídeos até 50 MB. Escolher um arquivo substitui o
+            link colado acima.
+          </p>
+        )}
+        {erroMidia && <p className="text-xs text-red-600">{erroMidia}</p>}
+
+        {urlMidia &&
+          (urlEhVideo(urlMidia) ? (
+            <video
+              src={urlMidia}
+              controls
+              preload="metadata"
+              className="mt-2 max-h-56 rounded-lg border border-gray-200"
+            />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={urlMidia}
+              alt="Prévia da foto do post"
+              className="mt-2 max-h-56 rounded-lg border border-gray-200"
+            />
+          ))}
       </Campo>
 
       <div className="grid grid-cols-2 gap-4">
@@ -112,7 +200,10 @@ export function FormularioPost({
 
       <MensagemAcao estado={estado} />
 
-      <BotaoEnviar carregandoTexto={carregandoTexto}>
+      <BotaoEnviar
+        carregandoTexto={carregandoTexto}
+        desabilitado={enviandoMidia}
+      >
         {rotuloBotao}
       </BotaoEnviar>
     </form>

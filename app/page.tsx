@@ -2,6 +2,7 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { NavBar } from "@/components/NavBar";
 import { AcoesPost } from "@/components/AcoesPost";
 import { IconePlus } from "@/components/icones";
+import { urlEhVideo } from "@/lib/constantes";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -126,7 +127,8 @@ export default async function FilaDePosts() {
 
               {post.imagem_url && (
                 <p className="mt-2 truncate text-xs text-gray-400">
-                  Imagem: {post.imagem_url}
+                  {urlEhVideo(post.imagem_url) ? "Vídeo" : "Imagem"}:{" "}
+                  {post.imagem_url}
                 </p>
               )}
 

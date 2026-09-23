@@ -63,7 +63,7 @@ export default async function EditarPostPage({
           ) : (
             <>
               <p className="mb-6 text-sm text-gray-500">
-                Altere o texto, a imagem ou o horário. Ele continua na fila
+                Altere o texto, a foto/vídeo ou o horário. Ele continua na fila
                 normalmente depois de salvar.
               </p>
 

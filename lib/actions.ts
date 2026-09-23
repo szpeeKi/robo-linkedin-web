@@ -4,68 +4,89 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { LIMITE_CARACTERES_POST } from "@/lib/constantes";
+import {
+  BUCKET_MIDIAS,
+  LIMITE_CARACTERES_POST,
+  TAMANHO_MAXIMO_IMAGEM,
+  TAMANHO_MAXIMO_VIDEO,
+} from "@/lib/constantes";
 
 export type EstadoAcao = { erro?: string; sucesso?: string } | null;
 
-const BUCKET_IMAGENS = "linkedin-imagens";
-const TAMANHO_MAXIMO_IMAGEM = 8 * 1024 * 1024; // 8 MB
+export type UploadPreparado =
+  | { erro: string }
+  | { caminho: string; token: string; urlPublica: string };
 
-// Sobe o arquivo escolhido pro Storage e devolve a URL pública. Usa o client
-// admin (service_role) porque é o mesmo padrão já usado em
-// salvarCredencialLinkedin — não depende de nenhuma policy de RLS do bucket
-// estar configurada certinho.
-async function enviarImagem(
-  arquivo: File
-): Promise<{ erro: string } | { url: string }> {
-  if (arquivo.size > TAMANHO_MAXIMO_IMAGEM) {
-    return { erro: "A imagem escolhida passa de 8 MB. Escolha uma menor." };
-  }
-  if (!arquivo.type.startsWith("image/")) {
-    return { erro: "O arquivo escolhido não parece ser uma imagem." };
+// Primeiro passo do envio de uma foto/vídeo do computador: valida o arquivo e
+// devolve uma URL de upload assinada, com a qual o NAVEGADOR manda o arquivo
+// direto pro Storage do Supabase. O arquivo não passa por aqui de propósito —
+// vídeo é grande demais pro limite de corpo das Server Actions e das funções do
+// Netlify. Usa o client admin (service_role) pra assinar, no mesmo padrão de
+// salvarCredencialLinkedin, então não depende de policy de RLS no bucket.
+export async function prepararUploadDeMidia(dados: {
+  nome: string;
+  tipo: string;
+  tamanho: number;
+}): Promise<UploadPreparado> {
+  const supabase = await createSupabaseServerClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) {
+    return { erro: "Sua sessão expirou. Atualize a página e entre de novo." };
   }
 
-  const extensao = arquivo.name.includes(".")
-    ? arquivo.name.slice(arquivo.name.lastIndexOf("."))
+  const ehVideo = dados.tipo.startsWith("video/");
+  const ehImagem = dados.tipo.startsWith("image/");
+  if (!ehVideo && !ehImagem) {
+    return { erro: "O arquivo escolhido não é uma foto nem um vídeo." };
+  }
+  if (ehImagem && dados.tamanho > TAMANHO_MAXIMO_IMAGEM) {
+    return { erro: "A foto escolhida passa de 8 MB. Escolha uma menor." };
+  }
+  if (ehVideo && dados.tamanho > TAMANHO_MAXIMO_VIDEO) {
+    return { erro: "O vídeo escolhido passa de 50 MB. Escolha um menor." };
+  }
+
+  const extensao = dados.nome.includes(".")
+    ? dados.nome.slice(dados.nome.lastIndexOf(".")).toLowerCase()
     : "";
-  const nomeArquivo = `${crypto.randomUUID()}${extensao}`;
+  const caminho = `${crypto.randomUUID()}${extensao}`;
 
   const admin = createSupabaseAdminClient();
-  const { error } = await admin.storage
-    .from(BUCKET_IMAGENS)
-    .upload(nomeArquivo, arquivo, { contentType: arquivo.type });
+  const { data, error } = await admin.storage
+    .from(BUCKET_MIDIAS)
+    .createSignedUploadUrl(caminho);
 
-  if (error) {
-    return { erro: `Não consegui enviar a imagem: ${error.message}` };
+  if (error || !data) {
+    return {
+      erro: `Não consegui preparar o envio: ${error?.message ?? "sem resposta"}`,
+    };
   }
 
-  const { data } = admin.storage.from(BUCKET_IMAGENS).getPublicUrl(nomeArquivo);
-  return { url: data.publicUrl };
+  const { data: publica } = admin.storage
+    .from(BUCKET_MIDIAS)
+    .getPublicUrl(caminho);
+
+  return { caminho, token: data.token, urlPublica: publica.publicUrl };
 }
 
-// Lê e valida os campos de texto/imagem/data/hora que o formulário de post
+// Lê e valida os campos de texto/mídia/data/hora que o formulário de post
 // (criar e editar) manda. Compartilhado pelas duas actions abaixo pra manter
 // as mesmas regras (limite de caracteres, fuso horário) num lugar só.
 //
-// A imagem pode vir de duas formas — um link colado ou um arquivo escolhido
-// do computador — e as duas viram a mesma coisa no fim (uma URL salva em
-// "imagem_url"); o arquivo, se escolhido, tem prioridade sobre o link.
+// A mídia (foto ou vídeo) chega sempre como uma URL em "imagem_url" — colada
+// pelo usuário, ou preenchida pelo formulário depois de enviar o arquivo
+// escolhido (ver prepararUploadDeMidia). O nome do campo/coluna ficou
+// "imagem_url" de quando só havia foto: o robô já instalado lê essa coluna, e
+// renomear quebraria ele.
 async function lerCamposDoFormulario(
   formData: FormData
 ): Promise<
   { erro: string } | { texto: string; imagemUrl: string; agendadoParaUtc: Date }
 > {
   const texto = String(formData.get("texto") ?? "").trim();
-  let imagemUrl = String(formData.get("imagem_url") ?? "").trim();
+  const imagemUrl = String(formData.get("imagem_url") ?? "").trim();
   const dataAgendada = String(formData.get("data_agendada") ?? "");
   const horaAgendada = String(formData.get("hora_agendada") ?? "");
-
-  const arquivoImagem = formData.get("imagem_arquivo");
-  if (arquivoImagem instanceof File && arquivoImagem.size > 0) {
-    const resultado = await enviarImagem(arquivoImagem);
-    if ("erro" in resultado) return resultado;
-    imagemUrl = resultado.url;
-  }
 
   if (!texto) {
     return { erro: "Escreva o texto do post antes de salvar." };

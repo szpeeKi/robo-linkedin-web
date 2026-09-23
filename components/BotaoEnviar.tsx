@@ -6,10 +6,12 @@ export function BotaoEnviar({
   children,
   carregandoTexto,
   variante = "primario",
+  desabilitado = false,
 }: {
   children: React.ReactNode;
   carregandoTexto: string;
   variante?: "primario" | "perigo";
+  desabilitado?: boolean;
 }) {
   const { pending } = useFormStatus();
 
@@ -21,7 +23,7 @@ export function BotaoEnviar({
   return (
     <button
       type="submit"
-      disabled={pending}
+      disabled={pending || desabilitado}
       className={`w-full rounded-lg py-2.5 text-sm font-medium text-white shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${estilos}`}
     >
       {pending ? carregandoTexto : children}
