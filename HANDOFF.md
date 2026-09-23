@@ -27,10 +27,25 @@ Quatro partes, cada uma numa pasta (na raiz `Robo-Linkedin`):
 ## Estado atual — tudo funcionando e testado hoje
 
 ### 1. App web (Netlify)
-✅ No ar, com upload de imagem no formulário (link OU arquivo do
-computador — os dois preenchem o mesmo campo `imagem_url`, arquivo tem
-prioridade se os dois forem preenchidos). Editar/excluir posts também já
-existia e continua funcionando.
+✅ No ar, com upload de **foto ou vídeo** no formulário (link OU arquivo do
+computador — os dois preenchem o mesmo campo `imagem_url`; escolher um arquivo
+substitui o link). Editar/excluir posts também já existia e continua
+funcionando.
+
+**Vídeo (adicionado em 23/09/2026, commit `b8d501d`)**: o arquivo NÃO passa
+mais pela Server Action. O navegador pede uma URL de upload assinada
+(`prepararUploadDeMidia` em `lib/actions.ts`, usa a service_role só no
+servidor) e manda o arquivo direto pro Supabase Storage
+(`uploadToSignedUrl`, em `components/FormularioPost.tsx`) — vídeo é grande
+demais pro limite de corpo das Server Actions/funções do Netlify. Limites em
+`lib/constantes.ts`: foto 8 MB, vídeo **50 MB** (teto do plano gratuito do
+Supabase; se o plano subir, é só aumentar lá). A coluna e o campo continuam
+chamados `imagem_url` de propósito (o robô já instalado lê esse nome; guarda
+foto OU vídeo). O bucket continua `linkedin-imagens`.
+⚠️ Verificado: build, tsc, eslint e upload de vídeo no Storage com a chave
+pública. **Não** foi testado o fluxo completo pela tela (precisa de login) —
+o trecho da URL assinada só roda em produção (a service_role local está vazia
+no `.env.local`).
 
 **Deploy automático**: conectado a um repositório GitHub
 (**https://github.com/szpeeKi/robo-linkedin-web** — **público**, sem
@@ -71,6 +86,17 @@ master` — o Netlify pega sozinho. Confirmar com
   ou com ela quebrada. Essa lógica já está certa em `linkedin_bot.py`
   (`publicar_post` baixa a imagem e só apaga no `finally`, depois de tudo).
   Não mexer nisso sem entender essa ordem.
+- **Vídeo** (23/09/2026): `_baixar_midia_temporaria` decide foto×vídeo pelo
+  `Content-Type` real da resposta (extensão só como reserva). No LinkedIn o
+  vídeo **não passa pelo editor "Avançar"** — volta direto pra caixa de
+  publicação com a prévia (`<video>`) e o botão Publicar (testado com MP4
+  H.264 de 5 s na conta "Rafael Teste": publicou com o vídeo em ~26 s).
+  `_confirmar_video_anexado` só libera quando aparece um `<video>` novo na
+  caixa (se não aparecer, para com erro em vez de publicar só o texto), e o
+  clique em Publicar espera até 10 min o botão habilitar (vídeos grandes).
+  **Não testado com vídeo grande** (dezenas de MB) — se o LinkedIn desabilitar
+  o Publicar durante o envio, o código já espera, mas vale conferir na
+  primeira vez.
 
 `config.py` também já resolve tudo (`.env`, caminho da sessão) relativo à
 própria pasta do script, não à pasta de onde foi chamado — então roda igual
@@ -136,11 +162,13 @@ Remove-Item "$env:LOCALAPPDATA\TesteX" -Recurse -Force
 
 ## ⚠️ Pendência urgente pro Rafael (não é código, é ação humana)
 
-**O instalador que foi entregue antes de hoje pro time de marketing tem os
-DOIS bugs graves** (venv que não roda em outro PC + imagem quebrada).
-**Precisa subir o `instalador\saida\Instalar-Posts-LinkedIn.exe` novo pro
-Google Drive/onde for compartilhado, e reinstalar na máquina do
-marketing.**
+O Rafael já subiu o instalador corrigido (venv + imagem) pro time. **Mas o
+suporte a vídeo mexeu em `robo-src/linkedin_bot.py`**, então o robô instalado
+no marketing ainda NÃO sabe publicar vídeo: é preciso **recompilar o
+instalador** (`ISCC.exe setup.iss`, ver seção "Instalador") e reinstalar na
+máquina do marketing. Até lá, posts com vídeo agendados pelo app web vão
+dar erro no robô antigo (ele espera o "Avançar" da foto, que não aparece no
+vídeo) e ficar com status "erro" na fila.
 
 ## Pendências de mais longo prazo (não urgentes)
 
