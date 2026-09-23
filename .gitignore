@@ -50,5 +50,9 @@ deno.lock
 /desktop-src
 /robo-src
 
+# Instalador pro time de marketing — tem a chave do Supabase em texto puro
+# (instalador/robo.env) e é grande demais (o .exe final passa de 200 MB).
+/instalador
+
 # Configuração local do Claude Code (específica desta máquina/sessão)
 /.claude
