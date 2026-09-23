@@ -1,0 +1,189 @@
+# Handoff — Bot de Posts do LinkedIn
+
+Contexto pro Claude (no VS Code) continuar exatamente de onde parou. Escrito
+em 23/09/2026, fim de uma sessão longa que resolveu vários bugs reais.
+
+## O que é o projeto
+
+Sistema pro time de marketing agendar posts no LinkedIn (via um app web +
+Supabase) e um robô Python que roda numa máquina dedicada, lê os posts
+agendados e publica automaticamente no LinkedIn usando Playwright (automação
+de navegador, não é API oficial).
+
+Quatro partes, cada uma numa pasta (na raiz `Robo-Linkedin`):
+
+- **App web** (`app/`, `components/`, `lib/` — Next.js): onde o time
+  cadastra os posts. Publicado em
+  **https://deluxe-treacle-2c7453.netlify.app**.
+- **App de mesa** (`desktop-src/` — Electron): abre o app web numa janela
+  sem barra de navegador, com uma barra de status própria (ícone InovaComm,
+  "próxima execução automática" e botão "Rodar agora").
+- **Robô** (`robo-src/` — Python + Playwright): lê posts pendentes no
+  Supabase e publica no LinkedIn, incluindo anexar imagem de verdade.
+- **Instalador** (`instalador/` — Inno Setup): empacota o app + o robô +
+  um Python portátil num único `.exe` pro time de marketing instalar sem
+  nenhum passo manual.
+
+## Estado atual — tudo funcionando e testado hoje
+
+### 1. App web (Netlify)
+✅ No ar, com upload de imagem no formulário (link OU arquivo do
+computador — os dois preenchem o mesmo campo `imagem_url`, arquivo tem
+prioridade se os dois forem preenchidos). Editar/excluir posts também já
+existia e continua funcionando.
+
+**Deploy automático**: conectado a um repositório GitHub
+(**https://github.com/szpeeKi/robo-linkedin-web** — **público**, sem
+segredos) que builda sozinho no Netlify a cada `git push origin master`.
+
+⚠️ **Duas armadilhas de deploy que já foram resolvidas, mas guarde isso**:
+- **Deploy manual pelo Windows não funciona** (`netlify deploy --prod`
+  rodando localmente) — bug real do empacotador de Edge Functions do
+  Netlify no Windows (mistura caminho estilo Unix com Windows,
+  `Cannot find module`). É por isso que o deploy tem que ser sempre via
+  `git push` (builda nos servidores Linux do Netlify).
+- **O repositório precisa continuar público** — Netlify bloqueia deploy de
+  repositório privado nessa conta com "Unrecognized Git contributor" (é uma
+  restrição de plano, não resolvi via painel/API). Se alguém tornar o repo
+  privado de novo, o deploy quebra.
+
+Pra deployar mudanças no app web: `git add`, `git commit`, `git push origin
+master` — o Netlify pega sozinho. Confirmar com
+`npx netlify-cli api listSiteDeploys --data '{"site_id":"055ad1dd-658c-4d4b-88fc-4a9e007efef6"}'`.
+
+### 2. Robô (`robo-src/`)
+✅ Funcionando, com três correções importantes feitas hoje:
+
+- **Usa o Microsoft Edge do sistema** (`channel="msedge"` no
+  `pw.chromium.launch(...)`) em vez de baixar um Chromium próprio — antes
+  precisava carregar ~350 MB extra pra distribuir.
+- **`requirements.txt` estava desatualizado**: pedia `supabase==2.9.1`
+  (não aceita o formato novo de chave `sb_secret_...`), mas a venv real já
+  usava 2.31.0 há tempos. Corrigido pra `supabase>=2.31.0`.
+- **Imagem anexada de verdade no post** (antes só guardava o link sem
+  usar). Fluxo: baixa a imagem pra um arquivo temporário → clica em "Mídia"
+  (usando `expect_file_chooser` pra não abrir o diálogo nativo do Windows)
+  → escolhe o arquivo → clica "Avançar" → confere se a prévia carregou
+  (não ficou com ícone de "imagem quebrada") antes de publicar.
+  **MUITO IMPORTANTE**: o arquivo temporário da imagem só pode ser apagado
+  **depois que o post inteiro publicar** — o LinkedIn lê o arquivo de forma
+  assíncrona, e apagar cedo demais é o que causava posts saindo sem imagem
+  ou com ela quebrada. Essa lógica já está certa em `linkedin_bot.py`
+  (`publicar_post` baixa a imagem e só apaga no `finally`, depois de tudo).
+  Não mexer nisso sem entender essa ordem.
+
+`config.py` também já resolve tudo (`.env`, caminho da sessão) relativo à
+própria pasta do script, não à pasta de onde foi chamado — então roda igual
+seja via Task Scheduler, `python main.py` direto, ou o `.bat` do instalador.
+
+### 3. App de mesa (`desktop-src/`)
+✅ Não é mais só uma janela passiva. Agora tem:
+- Barra de status no topo com logo InovaComm, texto "Próxima execução
+  automática: HH:MM" e botão **"Rodar agora"**.
+- "Rodar agora" aciona a **mesma tarefa agendada** (`Robo Posts LinkedIn`)
+  via PowerShell (`Start-ScheduledTask`) — nunca sobe um robô paralelo.
+  Se a tarefa não existir na máquina (app rodando sem o instalador), mostra
+  aviso e desabilita o botão em vez de travar.
+- Conteúdo do app web carrega dentro de uma `<webview>` (não mais
+  `loadURL` direto) — necessário pra caber a barra de status acima.
+- Ícone: `desktop-src/build/icon.ico` (marca circular da InovaComm
+  recortada da logo, gerado com `electron-icon-builder`).
+
+Rebuild: `cd desktop-src && npm run empacotar-windows` (gera
+`desktop-src\dist\Posts do LinkedIn-win32-x64\`).
+
+### 4. Instalador (`instalador/`)
+✅ **117 MB** (era 208 MB antes de hoje). Arquivo final:
+`instalador\saida\Instalar-Posts-LinkedIn.exe`.
+
+Duas mudanças grandes hoje:
+- **Não copia mais a `.venv` do robô** — isso quebrava em qualquer PC
+  diferente do do Rafael, porque a venv guarda o caminho exato de onde foi
+  criada (`pyvenv.cfg` aponta pra uma instalação específica do Python que
+  só existe nesse PC). Sintoma era exatamente "abre um cmd e fecha rápido".
+  Agora usa uma **distribuição Python portátil de verdade**
+  (`instalador\python-portatil\`, baixada do python.org como "embeddable
+  zip", com pip + as dependências do `requirements.txt` já instaladas
+  dentro) — funciona em qualquer Windows sem precisar de Python instalado.
+- **Não empacota mais o Chromium do Playwright** (usa o Edge do sistema,
+  ver seção do robô acima).
+
+**Como recompilar** depois de mexer em `desktop-src` ou `robo-src`:
+```powershell
+cd instalador
+& "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" setup.iss
+```
+(ou o caminho completo:
+`C:\Users\RafaelPintodeSouzaSa\AppData\Local\Programs\Inno Setup 6\ISCC.exe`)
+
+Se só mudar `robo-src/*.py`, **não precisa reinstalar nada no
+`python-portatil`** — ele só tem os pacotes pip, os `.py` são copiados
+fresquinhos do `robo-src` a cada compilação.
+
+Se mudar `robo-src/requirements.txt` (nova dependência), aí sim precisa
+rodar de novo:
+```powershell
+& "instalador\python-portatil\python.exe" -m pip install -r "robo-src\requirements.txt"
+```
+
+**Testar instalação limpa** (útil antes de distribuir):
+```powershell
+Start-Process "instalador\saida\Instalar-Posts-LinkedIn.exe" -ArgumentList "/VERYSILENT","/DIR=$env:LOCALAPPDATA\TesteX","/SUPPRESSMSGBOXES","/NORESTART" -Wait
+& "$env:LOCALAPPDATA\TesteX\rodar_robo.bat"   # roda o robô de verdade, publica se tiver post pendente
+schtasks /Delete /TN "Robo Posts LinkedIn" /F  # limpar depois
+Remove-Item "$env:LOCALAPPDATA\TesteX" -Recurse -Force
+```
+
+## ⚠️ Pendência urgente pro Rafael (não é código, é ação humana)
+
+**O instalador que foi entregue antes de hoje pro time de marketing tem os
+DOIS bugs graves** (venv que não roda em outro PC + imagem quebrada).
+**Precisa subir o `instalador\saida\Instalar-Posts-LinkedIn.exe` novo pro
+Google Drive/onde for compartilhado, e reinstalar na máquina do
+marketing.**
+
+## Pendências de mais longo prazo (não urgentes)
+
+- O repositório GitHub está **público** por necessidade (ver seção de
+  deploy acima). Se isso incomodar no futuro, as opções são: contatar
+  suporte do Netlify pedindo "verified member", ou aceitar o repo público
+  (não tem segredo nenhum nele — todos os `.env`/chaves ficam fora do git).
+- A conta de teste do LinkedIn (perfil "Rafael Teste") acumulou muitos
+  posts de teste durante os testes de hoje (textos tipo "TESTE FIX ####",
+  "teste imagem", etc.) — apagar manualmente se incomodar, não é urgente.
+- Criar os usuários de login do time de marketing no Supabase Auth
+  (pendência antiga, ainda não feita).
+- Existe um projeto Netlify extra por acidente (`eloquent-hummingbird-0db7ef`)
+  — provavelmente não usado, nunca confirmado com o Rafael se pode apagar.
+- `desktop-src` não tem testes automatizados formais — as verificações
+  feitas hoje foram via Playwright `_electron` manualmente (não fica salvo
+  como suite de testes no repo).
+
+## Onde estão as coisas (referência rápida)
+
+| O quê | Caminho |
+|---|---|
+| App web (código) | raiz do repo: `app/`, `components/`, `lib/` |
+| Robô (dev, com `.venv` própria) | `robo-src/` |
+| App de mesa (Electron) | `desktop-src/` |
+| App de mesa (build) | `desktop-src\dist\Posts do LinkedIn-win32-x64\` |
+| Instalador (fonte) | `instalador\setup.iss`, `instalador\python-portatil\`, `instalador\robo.env`, `instalador\rodar_robo.bat` |
+| Instalador (.exe final) | `instalador\saida\Instalar-Posts-LinkedIn.exe` |
+| Repositório GitHub (app web) | https://github.com/szpeeKi/robo-linkedin-web (público) |
+| Site no Netlify | https://deluxe-treacle-2c7453.netlify.app (site_id `055ad1dd-658c-4d4b-88fc-4a9e007efef6`) |
+| Bucket de imagens (Supabase Storage) | `linkedin-imagens` (público) |
+| Tarefa agendada do robô (Windows) | nome exato: `Robo Posts LinkedIn` |
+
+**Importante**: `robo-src/`, `desktop-src/` e `instalador/` estão todos no
+`.gitignore` do repositório do app web — só o app web (Next.js) é
+versionado no GitHub. Isso é intencional (robô/instalador têm segredos e
+são grandes demais).
+
+## Regra importante (segurança)
+
+Nunca digitar senhas, chaves de API ou outros segredos direto em
+formulários/arquivos sem o Rafael colar ele mesmo — regra seguida à risca
+até aqui. A `SUPABASE_SERVICE_ROLE_KEY` já está em `robo-src/.env` e em
+`instalador/robo.env` (o Rafael topou distribuir essa chave dentro do
+instalador pro time de marketing — decisão consciente dele, registrada na
+sessão).
