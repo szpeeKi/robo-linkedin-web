@@ -43,7 +43,7 @@ export default async function FilaDePosts() {
   const { data: posts, error } = await supabase
     .from("linkedin_posts_agendados")
     .select(
-      "id, texto, imagem_url, agendado_para, status, erro_mensagem, criado_por"
+      "id, texto, imagem_url, agendado_para, status, erro_mensagem, criado_por, linkedin_post_url"
     )
     .order("agendado_para", { ascending: true });
 
@@ -130,6 +130,17 @@ export default async function FilaDePosts() {
                   {urlEhVideo(post.imagem_url) ? "Vídeo" : "Imagem"}:{" "}
                   {post.imagem_url}
                 </p>
+              )}
+
+              {post.status === "publicado" && post.linkedin_post_url && (
+                <a
+                  href={post.linkedin_post_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-blue-700 underline underline-offset-2 hover:text-blue-900"
+                >
+                  Ver post no LinkedIn ↗
+                </a>
               )}
 
               {post.status === "erro" && post.erro_mensagem && (
