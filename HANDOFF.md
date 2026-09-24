@@ -106,13 +106,26 @@ master` — o Netlify pega sozinho. Confirmar com
   `%LOCALAPPDATA%\...\robo\ultimo_erro.png`) e ajuste os seletores. A conta
   cadastrada em Configurações no app precisa ser a do marketing que é ADMIN da
   página, não a "Rafael Teste".
-- **Painel da página, "Criar" não era clicado** (24/09/2026): o Rafael relatou
-  que o robô abria o painel de admin e não clicava em "Criar". Não deu pra
-  reproduzir com a sessão de dev ("Rafael Teste" não administra página nenhuma).
-  Mudança: a busca do "Criar" agora tenta botão, link e texto puro (com espera
-  até 30 s e `networkidle` antes), e quando falha o erro (que aparece na fila)
-  lista os botões/links visíveis na tela (`_resumo_da_tela`) — assim dá pra ver
-  o que o robô enxergou. ⚠️ Regra do Rafael: **NUNCA publicar na página
+- **Painel da página: causa do "Criar" não ser clicado** (24/09/2026): endereços
+  de painel com o NOME da página (`/company/inovacomm/admin/dashboard/`) só
+  funcionam com o navegador VISÍVEL; no modo invisível o LinkedIn manda pra
+  `/company/unavailable/` (testado, mesmo com user-agent normal e
+  `--headless=new`). Com o NÚMERO (`/company/69467287/admin/dashboard/`)
+  funciona nos dois modos. Correção: `_resolver_painel_da_pagina` — pra
+  endereço com nome, abre a página PÚBLICA (`/company/<nome>/`), que pra quem é
+  admin redireciona pro painel com o número (funciona invisível), e usa esse
+  número; se não redirecionar, erro claro "conta não é administradora". Então
+  tanto o nome quanto o número servem em Configurações. Também: a busca do
+  "Criar" tenta botão/link/texto (até 30 s) e o erro lista o que o robô viu na
+  tela (`_resumo_da_tela`). Página InovaComm = id `69467287`. **Validado com a
+  conta admin do Rafael** (login feito por ele numa janela visível; sessão
+  apagada depois), SEMPRE em simulação, no modo invisível: abrir painel > Criar
+  > Começar publicação > conferir autor > anexar VÍDEO e FOTO (botão de mídia da
+  caixa da página tem `aria-label="Adicionar mídia"`, só ícone) > escrever > parar
+  no Publicar habilitado. NÃO validado: o clique real em Publicar e a captura do
+  link no modo página, e a OpenBox Brasil (cadastrada pelo marketing como
+  `.../company/openboxbrasil/...`; a conta de teste não administra ela).
+  ⚠️ Regra do Rafael: **NUNCA publicar na página
   principal em teste** — testes contra uma página usam `SIMULAR_SEM_PUBLICAR=true`
   (o `robo-src\.env` de dev já vem com isso ligado por padrão; só o perfil
   "Rafael Teste" recebeu posts de teste reais). O sistema também barrou (com
