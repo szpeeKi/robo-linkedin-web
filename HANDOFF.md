@@ -227,6 +227,25 @@ troque a linha `SIMULAR_SEM_PUBLICAR` por `true` na cópia. O
 `setup.iss`). A instalação do instalador de TESTE em si não foi testada (a máquina
 de desenvolvimento já tem tarefa agendada/registro de instalação desse AppId).
 
+**Sem janela do cmd piscando (24/09/2026)**: a tarefa agendada agora roda
+`robo\python-portatil\pythonw.exe robo\main.py` direto (Python SEM console) em vez
+do `rodar_robo.bat` (o `.bat` abria um cmd a cada 10 min). Sem console a saída vai
+pra `robo\robo.log` (`_configurar_log_sem_console` em `main.py`; roda só quando
+`sys.stdout` é `None`, ou seja, com pythonw; passa de 1 MB vira `robo.log.antigo`) —
+**é onde olhar quando algo der errado**. O `rodar_robo.bat` continua existindo pra
+rodar na mão (mostra a saída na tela) e é o que o "Rodar o robô agora" do fim da
+instalação abre (visível de propósito, pra resolver verificação do LinkedIn). O
+"Rodar agora" do app de mesa já escondia a janela do PowerShell (`windowsHide`).
+Testado: pythonw + Playwright/Edge funcionam sem console (estrutura real
+`robo\python-portatil` + `robo\main.py`, cwd = System32) e o `schtasks /TR` com
+aspas escapadas aceita caminho com espaços. ⚠️ O `._pth` do Python portátil usa
+`..` pra achar `config.py`: só funciona com o `python-portatil` DENTRO da pasta
+`robo` (como no instalador), não lado a lado com `robo-src` no desenvolvimento.
+A janela do NAVEGADOR (Edge) continua aparecendo durante a publicação porque o
+`robo.env` vem com `NAVEGADOR_VISIVEL = true` (necessário na 1ª vez pra resolver
+a verificação do LinkedIn); depois de logado dá pra trocar por `false` — o modo
+invisível funcionou no painel da página com o endereço resolvido.
+
 **Como recompilar** depois de mexer em `desktop-src` ou `robo-src`:
 ```powershell
 cd instalador
