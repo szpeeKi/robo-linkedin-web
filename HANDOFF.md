@@ -333,8 +333,17 @@ vídeo) e ficar com status "erro" na fila.
 - A conta de teste do LinkedIn (perfil "Rafael Teste") acumulou muitos
   posts de teste durante os testes de hoje (textos tipo "TESTE FIX ####",
   "teste imagem", etc.) — apagar manualmente se incomodar, não é urgente.
-- Criar os usuários de login do time de marketing no Supabase Auth
-  (pendência antiga, ainda não feita).
+- Logins do time de marketing (Supabase Auth): `wallace.silva@inovacomm.com.br` e
+  `manuela.brandao@inovacomm.com.br` (criada em 24/09/2026 via
+  `auth.admin.create_user` com a service_role, e-mail já confirmado, senha
+  temporária aleatória entregue ao Rafael no chat — não está salva em arquivo).
+  ⚠️ O app NÃO tem tela de trocar/recuperar senha: pra trocar a de alguém, use o
+  painel do Supabase (Authentication > Users) ou `auth.admin.update_user_by_id`.
+  Pra criar mais um login, mesmo método (o `.env.local` local tem a service_role
+  vazia; use a do `robo-src/.env` ou o painel do Supabase).
+- Em 24/09/2026 a fila foi zerada a pedido do Rafael (35 posts de teste: 12 com
+  erro, 23 publicados; nenhum pendente) e os 11 arquivos de mídia do bucket foram
+  apagados.
 - Existe um projeto Netlify extra por acidente (`eloquent-hummingbird-0db7ef`)
   — provavelmente não usado, nunca confirmado com o Rafael se pode apagar.
 - `desktop-src` não tem testes automatizados formais — as verificações
