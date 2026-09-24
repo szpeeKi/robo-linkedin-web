@@ -106,6 +106,18 @@ master` — o Netlify pega sozinho. Confirmar com
   `%LOCALAPPDATA%\...\robo\ultimo_erro.png`) e ajuste os seletores. A conta
   cadastrada em Configurações no app precisa ser a do marketing que é ADMIN da
   página, não a "Rafael Teste".
+- **Painel da página, "Criar" não era clicado** (24/09/2026): o Rafael relatou
+  que o robô abria o painel de admin e não clicava em "Criar". Não deu pra
+  reproduzir com a sessão de dev ("Rafael Teste" não administra página nenhuma).
+  Mudança: a busca do "Criar" agora tenta botão, link e texto puro (com espera
+  até 30 s e `networkidle` antes), e quando falha o erro (que aparece na fila)
+  lista os botões/links visíveis na tela (`_resumo_da_tela`) — assim dá pra ver
+  o que o robô enxergou. ⚠️ Regra do Rafael: **NUNCA publicar na página
+  principal em teste** — testes contra uma página usam `SIMULAR_SEM_PUBLICAR=true`
+  (o `robo-src\.env` de dev já vem com isso ligado por padrão; só o perfil
+  "Rafael Teste" recebeu posts de teste reais). O sistema também barrou (com
+  razão) copiar cookies do navegador do Rafael pra testar como admin: o caminho
+  aceito é abrir uma janela visível e ELE fazer o login ali.
 - **Seletor de página por post** (24/09/2026): o marketing administra várias
   páginas (a conta tem "Minhas páginas (3)": InovaComm, OpenBox Brasil e mais
   uma), então cada post escolhe a página. Tabela `linkedin_paginas` (id, nome,
