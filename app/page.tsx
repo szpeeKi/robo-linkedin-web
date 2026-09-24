@@ -1,26 +1,31 @@
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { NavBar } from "@/components/NavBar";
 import { AcoesPost } from "@/components/AcoesPost";
+import { AvisoDoRobo } from "@/components/AvisoDoRobo";
 import { IconePlus } from "@/components/icones";
 import { urlEhVideo } from "@/lib/constantes";
+import { minutosDesde } from "@/lib/tempo";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
 const statusStyle: Record<string, string> = {
   pendente: "bg-yellow-50 text-yellow-800 ring-1 ring-yellow-600/20",
+  publicando: "bg-blue-50 text-blue-800 ring-1 ring-blue-600/20",
   publicado: "bg-green-50 text-green-800 ring-1 ring-green-600/20",
   erro: "bg-red-50 text-red-800 ring-1 ring-red-600/20",
 };
 
 const statusDot: Record<string, string> = {
   pendente: "bg-yellow-500",
+  publicando: "bg-blue-500",
   publicado: "bg-green-500",
   erro: "bg-red-500",
 };
 
 const statusLabel: Record<string, string> = {
   pendente: "Pendente",
+  publicando: "Publicando...",
   publicado: "Publicado",
   erro: "Erro",
 };
@@ -48,6 +53,16 @@ export default async function FilaDePosts() {
     .order("agendado_para", { ascending: true });
 
   const pendentes = posts?.filter((p) => p.status === "pendente").length ?? 0;
+  const comErro = posts?.filter((p) => p.status === "erro").length ?? 0;
+
+  // Sinal de vida do robô (ele grava a cada execução); o aviso aparece se
+  // ficar tempo demais sem sinal ou se o robô deixou um alerta pra uma pessoa.
+  const { data: robo } = await supabase
+    .from("robo_status")
+    .select("ultima_execucao, alerta")
+    .eq("id", 1)
+    .maybeSingle();
+  const minutosSemSinal = robo ? minutosDesde(robo.ultima_execucao) : null;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -65,6 +80,12 @@ export default async function FilaDePosts() {
                 : pendentes === 0
                   ? "Nenhum post esperando pra sair agora."
                   : `${pendentes} post${pendentes > 1 ? "s" : ""} na fila esperando a hora certa.`}
+              {comErro > 0 && (
+                <span className="font-medium text-red-600">
+                  {" "}
+                  · {comErro} com erro
+                </span>
+              )}
             </p>
           </div>
           <Link
@@ -75,6 +96,8 @@ export default async function FilaDePosts() {
             Novo post
           </Link>
         </div>
+
+        <AvisoDoRobo robo={robo} minutosSemSinal={minutosSemSinal} />
 
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
@@ -133,8 +156,12 @@ export default async function FilaDePosts() {
 
               {post.imagem_url && (
                 <p className="mt-2 truncate text-xs text-gray-400">
-                  {urlEhVideo(post.imagem_url) ? "Vídeo" : "Imagem"}:{" "}
-                  {post.imagem_url}
+                  {urlEhVideo(post.imagem_url) ? "Vídeo" : "Imagem"}
+                  {/* Depois de publicado, o robô apaga o arquivo do armazenamento
+                      (pra não encher o espaço), então o link deixa de funcionar. */}
+                  {post.status === "publicado"
+                    ? " anexado ao post"
+                    : `: ${post.imagem_url}`}
                 </p>
               )}
 
@@ -156,7 +183,7 @@ export default async function FilaDePosts() {
               )}
 
               {(post.status === "pendente" || post.status === "erro") && (
-                <AcoesPost id={post.id} podeEditar={post.status === "pendente"} />
+                <AcoesPost id={post.id} status={post.status} />
               )}
             </li>
           ))}

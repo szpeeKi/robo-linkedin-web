@@ -222,18 +222,21 @@ export async function editarPost(
         pagina_nome: campos.paginaNome,
         pagina_admin_url: campos.paginaAdminUrl,
         agendado_para: campos.agendadoParaUtc.toISOString(),
+        // Post com erro volta pra fila ("Tentar de novo"); pendente continua pendente.
+        status: "pendente",
+        erro_mensagem: null,
       },
       { count: "exact" }
     )
     .eq("id", id)
-    .eq("status", "pendente");
+    .in("status", ["pendente", "erro"]);
 
   if (error) {
     return { erro: `Não consegui salvar as alterações: ${error.message}` };
   }
   if (!count) {
     return {
-      erro: "Esse post não está mais pendente, então não dá mais pra editar.",
+      erro: "Esse post já foi publicado ou está sendo publicado agora, então não dá mais pra editar.",
     };
   }
 

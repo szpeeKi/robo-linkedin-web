@@ -7,10 +7,10 @@ import { IconeLapis, IconeLixeira } from "@/components/icones";
 
 export function AcoesPost({
   id,
-  podeEditar,
+  status,
 }: {
   id: string;
-  podeEditar: boolean;
+  status: "pendente" | "erro";
 }) {
   const [estado, formAction] = useActionState(apagarPost, null);
 
@@ -20,15 +20,15 @@ export function AcoesPost({
         <span className="mr-auto text-xs text-red-600">{estado.erro}</span>
       )}
 
-      {podeEditar && (
-        <Link
-          href={`/editar/${id}`}
-          className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900"
-        >
-          <IconeLapis className="size-3.5" />
-          Editar
-        </Link>
-      )}
+      {/* Post com erro também abre o formulário: salvar devolve o post pra fila
+          (com o horário novo), que é o "Tentar de novo". */}
+      <Link
+        href={`/editar/${id}`}
+        className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900"
+      >
+        <IconeLapis className="size-3.5" />
+        {status === "erro" ? "Tentar de novo" : "Editar"}
+      </Link>
 
       <form
         action={formAction}

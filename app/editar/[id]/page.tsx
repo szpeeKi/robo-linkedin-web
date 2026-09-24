@@ -5,6 +5,7 @@ import { NavBar } from "@/components/NavBar";
 import { FormularioPost } from "@/components/FormularioPost";
 import { IconeSeta } from "@/components/icones";
 import { editarPost } from "@/lib/actions";
+import { isoDaquiAMinutos } from "@/lib/tempo";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,9 @@ export default async function EditarPostPage({
 
   const { data: post } = await supabase
     .from("linkedin_posts_agendados")
-    .select("id, texto, imagem_url, agendado_para, status, pagina_admin_url")
+    .select(
+      "id, texto, imagem_url, agendado_para, status, pagina_admin_url, erro_mensagem"
+    )
     .eq("id", id)
     .maybeSingle();
 
@@ -47,7 +50,12 @@ export default async function EditarPostPage({
     paginas?.find((p) => p.admin_url === post.pagina_admin_url)?.id ??
     (paginas?.length === 1 ? paginas[0].id : "");
 
-  const hora = paraDataHoraSaoPaulo(post.agendado_para);
+  // Post com erro pode ser tentado de novo: o horário antigo já passou, então o
+  // formulário já vem com "daqui a 5 minutos" (dá pra trocar antes de salvar).
+  const ehErro = post.status === "erro";
+  const hora = paraDataHoraSaoPaulo(
+    ehErro ? isoDaquiAMinutos(5) : post.agendado_para
+  );
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -64,20 +72,38 @@ export default async function EditarPostPage({
 
         <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8">
           <h1 className="mb-1 text-lg font-semibold text-gray-900">
-            Editar post
+            {ehErro ? "Tentar de novo" : "Editar post"}
           </h1>
 
-          {post.status !== "pendente" ? (
+          {post.status !== "pendente" && !ehErro ? (
             <p className="mt-4 rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800">
               Esse post já não está mais pendente, então não dá mais pra
               editar.
             </p>
           ) : (
             <>
-              <p className="mb-6 text-sm text-gray-500">
-                Altere o texto, a foto/vídeo ou o horário. Ele continua na fila
-                normalmente depois de salvar.
-              </p>
+              {ehErro ? (
+                <div className="mb-6 space-y-3">
+                  {post.erro_mensagem && (
+                    <p className="rounded-lg bg-red-50 p-2.5 text-xs text-red-700">
+                      {post.erro_mensagem}
+                    </p>
+                  )}
+                  <p className="text-sm text-gray-500">
+                    Confira o horário (já vem daqui a 5 minutos) e salve: o post
+                    volta pra fila e o robô tenta de novo.{" "}
+                    <strong className="font-medium text-gray-700">
+                      Se o erro diz que a publicação foi interrompida, confira
+                      primeiro no LinkedIn se o post não saiu.
+                    </strong>
+                  </p>
+                </div>
+              ) : (
+                <p className="mb-6 text-sm text-gray-500">
+                  Altere o texto, a foto/vídeo ou o horário. Ele continua na fila
+                  normalmente depois de salvar.
+                </p>
+              )}
 
               <FormularioPost
                 acao={editarPost}
@@ -88,7 +114,7 @@ export default async function EditarPostPage({
                   data_agendada: hora.data,
                   hora_agendada: hora.hora,
                 }}
-                rotuloBotao="Salvar alterações"
+                rotuloBotao={ehErro ? "Reagendar e tentar de novo" : "Salvar alterações"}
                 carregandoTexto="Salvando..."
                 paginas={(paginas ?? []).map(({ id, nome }) => ({ id, nome }))}
                 paginaIdInicial={paginaIdInicial}
