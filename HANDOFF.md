@@ -131,6 +131,46 @@ master` — o Netlify pega sozinho. Confirmar com
   "Rafael Teste" recebeu posts de teste reais). O sistema também barrou (com
   razão) copiar cookies do navegador do Rafael pra testar como admin: o caminho
   aceito é abrir uma janela visível e ELE fazer o login ali.
+- **Robustez (24/09/2026, itens 1-4 sugeridos pelo Claude e aprovados)**:
+  1. **Sem post duplicado**: novo status `publicando` (o CHECK do banco foi
+     ampliado). `main.py` passa `antes_de_publicar` pro `publicar_post`; o hook é
+     chamado logo ANTES do clique em Publicar e faz `reivindicar_post` (UPDATE
+     atômico `pendente` → `publicando`; quem chegar depois desiste com
+     `PostJaEmAndamento`, sem mexer no status). Se a execução morrer depois do
+     clique, o post fica `publicando` e, após 30 min, `recuperar_posts_travados`
+     o marca `erro` ("confira no LinkedIn") — NUNCA volta sozinho pra `pendente`.
+     Falha antes do clique continua `pendente` (retenta sozinho, é seguro).
+     No modo simulação o hook nem é chamado (para antes).
+  2. **Robô parado / precisa de ajuda**: tabela `robo_status` (1 linha, id=1:
+     `ultima_execucao`, `alerta`). O robô grava o sinal de vida a cada execução
+     (`registrar_execucao`, não mexe no alerta) e o alerta quando precisa de uma
+     pessoa (verificação do LinkedIn / credencial faltando); um publicar com
+     sucesso limpa o alerta. `components/AvisoDoRobo.tsx` na fila mostra: alerta
+     (vermelho), "sem sinal há X" (>30 min; o robô roda a cada 10) e "nunca deu
+     sinal". Também: contador "N com erro" no topo da fila. ⚠️ Enquanto o robô
+     NOVO não estiver instalado no marketing, o aviso de "sem sinal" aparece
+     (é verdade: o robô antigo não grava o sinal). Não há notificação por
+     e-mail/Teams (próximo passo possível: webhook).
+  3. **Mídia apagada após publicar**: `apagar_midia_do_post` remove do bucket
+     `linkedin-imagens` a foto/vídeo do post publicado, só se for arquivo do
+     NOSSO bucket (link externo nunca é tocado) e nenhum outro post
+     pendente/publicando/erro usar o mesmo arquivo. A fila mostra "Vídeo/Imagem
+     anexado ao post" (sem o link, que morre). Post com erro mantém a mídia.
+     Nota: a URL pública pode continuar respondendo por um tempo por causa do
+     cache da CDN do Supabase, mas o arquivo já saiu do Storage.
+  4. **Tentar de novo**: post com `erro` abre `/editar/<id>` ("Tentar de novo"),
+     com a mensagem de erro, horário já em "daqui a 5 min" (`lib/tempo.ts`) e
+     botão "Reagendar e tentar de novo"; salvar (`editarPost`) volta o post pra
+     `pendente` e limpa o erro. Serve também pros posts marcados como erro pela
+     simulação.
+  Testado contra o banco real (`scratchpad/teste_novidades.py`): reivindicar (2ª
+  tentativa falha), travados (só o antigo), sinal de vida/alerta, apagar mídia
+  (incl. "não apaga se outro post usa" e link externo) e o fluxo real do
+  `main.py` no PERFIL de teste (publicou, gravou link, apagou mídia, limpou
+  alerta) — com a busca restrita ao post de teste (senão o `main.py` publicaria
+  posts REAIS pendentes do marketing pelo perfil de teste; nunca rode `main.py`
+  com `SIMULAR_SEM_PUBLICAR=false` em dev sem essa guarda). Só compilados, não
+  testados com login: a tela de "Tentar de novo" e o aviso na fila.
 - **Seletor de página por post** (24/09/2026): o marketing administra várias
   páginas (a conta tem "Minhas páginas (3)": InovaComm, OpenBox Brasil e mais
   uma), então cada post escolhe a página. Tabela `linkedin_paginas` (id, nome,
