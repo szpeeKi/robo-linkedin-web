@@ -106,6 +106,28 @@ master` — o Netlify pega sozinho. Confirmar com
   `%LOCALAPPDATA%\...\robo\ultimo_erro.png`) e ajuste os seletores. A conta
   cadastrada em Configurações no app precisa ser a do marketing que é ADMIN da
   página, não a "Rafael Teste".
+- **Seletor de página por post** (24/09/2026): o marketing administra várias
+  páginas (a conta tem "Minhas páginas (3)": InovaComm, OpenBox Brasil e mais
+  uma), então cada post escolhe a página. Tabela `linkedin_paginas` (id, nome,
+  admin_url; RLS só pra `authenticated`) = catálogo do seletor, cadastrado em
+  **Configurações > Páginas do LinkedIn** (nome exato + link da página;
+  `lib/paginas.ts` transforma o link colado em
+  `.../company/<slug>/admin/dashboard/`). Semeada só com a InovaComm — os
+  endereços da OpenBox e da 3ª página **não são conhecidos**, o time cadastra.
+  O post guarda uma CÓPIA (`pagina_nome`, `pagina_admin_url` em
+  `linkedin_posts_agendados`, sem FK) de propósito: apagar uma página da lista não
+  mexe em posts existentes (a remoção só é barrada se houver posts *pendentes*
+  nela). O servidor busca nome/URL pelo id do formulário (`lerCamposDoFormulario`
+  em `lib/actions.ts`), então ninguém injeta um endereço qualquer no robô. Com
+  páginas cadastradas, escolher é obrigatório (1 página só = já vem escolhida;
+  post antigo sem página + várias páginas = vem sem escolha, pra forçar decidir).
+  Robô: `publicar_post(..., pagina_admin_url, pagina_nome)`; post sem página
+  usa `LINKEDIN_PAGINA_ADMIN_URL/NOME` do `.env` (InovaComm), e sem isso o feed
+  pessoal. ⚠️ **Robô antigo ignora a página do post e posta na do `.env`** (ou
+  no perfil pessoal, se for anterior ao modo página) — reinstalar o robô na
+  máquina do marketing ANTES de usar o seletor. Testado: o robô abre o endereço
+  do post (não o do `.env`), o interpretador de links; a tela (Configurações e
+  seletor) só compila, não foi testada com login.
 - **Link do post** (24/09/2026): depois de publicar, `_capturar_link_do_post`
   lê o aviso "Publicação concluída. **Ver publicação**" (`role=alert`) e devolve
   `https://www.linkedin.com/feed/update/urn:li:activity:<id>/`. `main.py` grava
