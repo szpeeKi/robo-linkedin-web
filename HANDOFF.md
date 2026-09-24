@@ -86,6 +86,34 @@ master` — o Netlify pega sozinho. Confirmar com
   ou com ela quebrada. Essa lógica já está certa em `linkedin_bot.py`
   (`publicar_post` baixa a imagem e só apaga no `finally`, depois de tudo).
   Não mexer nisso sem entender essa ordem.
+- **Publica como PÁGINA da empresa** (24/09/2026): descobrimos que o marketing
+  NÃO posta pelo feed do perfil pessoal — entra na conta pessoal e posta pelo
+  painel de admin da página InovaComm (botão "Criar" > "Começar publicação").
+  Agora, se `LINKEDIN_PAGINA_ADMIN_URL` estiver no `.env` do robô, ele segue
+  esse caminho (`_abrir_caixa_como_pagina` + `_conferir_autor_da_pagina` em
+  `linkedin_bot.py`); vazia = comportamento antigo (feed pessoal). O
+  `instalador\robo.env` já vem com
+  `LINKEDIN_PAGINA_ADMIN_URL=https://www.linkedin.com/company/inovacomm/admin/dashboard/`
+  e `LINKEDIN_PAGINA_NOME=InovaComm Comunicações Unificadas` (o `robo-src\.env`
+  de desenvolvimento continua no modo pessoal, pra testar com "Rafael Teste").
+  A conferência de `LINKEDIN_PAGINA_NOME` aborta se a caixa abrir como pessoa
+  (nunca posta na conta errada). ⚠️ **O fluxo como ADMIN nunca foi testado de
+  verdade**: a conta "Rafael Teste" não administra a página (o LinkedIn manda
+  ela pra `/company/unavailable/` e o robô para com erro claro — isso foi
+  testado). Os seletores ("Criar", "Começar publicação", o `dialog`, o botão de
+  mídia) vêm dos prints do Rafael. Se falhar na primeira vez, olhe o
+  `ultimo_erro.png` (screenshot salvo ao lado do robô a cada erro, ex.:
+  `%LOCALAPPDATA%\...\robo\ultimo_erro.png`) e ajuste os seletores. A conta
+  cadastrada em Configurações no app precisa ser a do marketing que é ADMIN da
+  página, não a "Rafael Teste".
+- **Link do post** (24/09/2026): depois de publicar, `_capturar_link_do_post`
+  lê o aviso "Publicação concluída. **Ver publicação**" (`role=alert`) e devolve
+  `https://www.linkedin.com/feed/update/urn:li:activity:<id>/`. `main.py` grava
+  em `linkedin_post_url` (coluna nova, migration `adiciona_linkedin_post_url`)
+  e o URN em `linkedin_post_urn`; a fila do app mostra "Ver post no LinkedIn ↗"
+  nos posts publicados. Nunca levanta erro (o post já saiu; falhar aqui
+  duplicaria o post numa nova tentativa) — se não achar, grava `None`. Testado
+  no perfil pessoal (texto e vídeo); no modo página assume-se o mesmo aviso.
 - **Vídeo** (23/09/2026): `_baixar_midia_temporaria` decide foto×vídeo pelo
   `Content-Type` real da resposta (extensão só como reserva). No LinkedIn o
   vídeo **não passa pelo editor "Avançar"** — volta direto pra caixa de
@@ -162,11 +190,13 @@ Remove-Item "$env:LOCALAPPDATA\TesteX" -Recurse -Force
 
 ## ⚠️ Pendência urgente pro Rafael (não é código, é ação humana)
 
-O Rafael já subiu o instalador corrigido (venv + imagem) pro time. **Mas o
-suporte a vídeo mexeu em `robo-src/linkedin_bot.py`**, então o robô instalado
-no marketing ainda NÃO sabe publicar vídeo: é preciso **recompilar o
-instalador** (`ISCC.exe setup.iss`, ver seção "Instalador") e reinstalar na
-máquina do marketing. Até lá, posts com vídeo agendados pelo app web vão
+O Rafael já subiu o instalador corrigido (venv + imagem) pro time. **Mas vídeo,
+publicação como página e captura do link mexeram em `robo-src/`**, então o robô
+instalado no marketing ainda NÃO faz nada disso: o instalador foi recompilado em
+24/09/2026 (`instalador\saida\Instalar-Posts-LinkedIn.exe`) e precisa ser
+**subido de novo pro Drive e reinstalado na máquina do marketing**. Depois de
+reinstalar, o primeiro post pela página é o teste real (ver aviso sobre o fluxo
+de admin não testado, na seção do robô). Até lá, posts com vídeo agendados pelo app web vão
 dar erro no robô antigo (ele espera o "Avançar" da foto, que não aparece no
 vídeo) e ficar com status "erro" na fila.
 
