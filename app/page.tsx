@@ -43,7 +43,7 @@ export default async function FilaDePosts() {
   const { data: posts, error } = await supabase
     .from("linkedin_posts_agendados")
     .select(
-      "id, texto, imagem_url, agendado_para, status, erro_mensagem, criado_por, linkedin_post_url"
+      "id, texto, imagem_url, agendado_para, status, erro_mensagem, criado_por, linkedin_post_url, pagina_nome"
     )
     .order("agendado_para", { ascending: true });
 
@@ -120,6 +120,12 @@ export default async function FilaDePosts() {
                   {formatarData(post.agendado_para)}
                 </span>
               </div>
+
+              {post.pagina_nome && (
+                <p className="mb-1 text-xs font-medium text-gray-500">
+                  Página: {post.pagina_nome}
+                </p>
+              )}
 
               <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-800">
                 {post.texto}

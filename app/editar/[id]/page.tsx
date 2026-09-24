@@ -27,13 +27,25 @@ export default async function EditarPostPage({
 
   const { data: post } = await supabase
     .from("linkedin_posts_agendados")
-    .select("id, texto, imagem_url, agendado_para, status")
+    .select("id, texto, imagem_url, agendado_para, status, pagina_admin_url")
     .eq("id", id)
     .maybeSingle();
 
   if (!post) {
     notFound();
   }
+
+  const { data: paginas } = await supabase
+    .from("linkedin_paginas")
+    .select("id, nome, admin_url")
+    .order("nome");
+
+  // Pré-seleciona a página do post. Post antigo (sem página) com várias páginas
+  // na lista vem sem escolha, pra forçar decidir em vez de trocar de página
+  // sem ninguém perceber.
+  const paginaIdInicial =
+    paginas?.find((p) => p.admin_url === post.pagina_admin_url)?.id ??
+    (paginas?.length === 1 ? paginas[0].id : "");
 
   const hora = paraDataHoraSaoPaulo(post.agendado_para);
 
@@ -78,6 +90,8 @@ export default async function EditarPostPage({
                 }}
                 rotuloBotao="Salvar alterações"
                 carregandoTexto="Salvando..."
+                paginas={(paginas ?? []).map(({ id, nome }) => ({ id, nome }))}
+                paginaIdInicial={paginaIdInicial}
               />
             </>
           )}

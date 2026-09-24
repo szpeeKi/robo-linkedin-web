@@ -1,5 +1,6 @@
 import { NavBar } from "@/components/NavBar";
 import { FormularioCredencial } from "@/components/FormularioCredencial";
+import { PaginasLinkedin } from "@/components/PaginasLinkedin";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 // Essa página depende de login e de uma chave secreta só disponível em tempo de
@@ -17,6 +18,11 @@ export default async function ConfiguracoesPage() {
     .order("atualizado_em", { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  const { data: paginas } = await admin
+    .from("linkedin_paginas")
+    .select("id, nome, admin_url")
+    .order("nome");
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -57,6 +63,17 @@ export default async function ConfiguracoesPage() {
         <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8">
           <FormularioCredencial />
         </div>
+
+        <h2 className="mb-1 mt-12 text-xl font-semibold tracking-tight text-gray-900">
+          Páginas do LinkedIn
+        </h2>
+        <p className="mb-6 text-sm text-gray-500">
+          As páginas da empresa em que o robô pode publicar. Ao agendar um post,
+          você escolhe em qual delas ele sai. A conta acima precisa ser
+          administradora de cada uma.
+        </p>
+
+        <PaginasLinkedin paginas={paginas ?? []} />
       </main>
     </div>
   );

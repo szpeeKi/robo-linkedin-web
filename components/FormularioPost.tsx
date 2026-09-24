@@ -21,16 +21,24 @@ export type ValoresIniciaisPost = {
   hora_agendada: string; // HH:mm, já no fuso de São Paulo
 };
 
+export type PaginaLinkedin = { id: string; nome: string };
+
 export function FormularioPost({
   acao,
   valoresIniciais,
   rotuloBotao,
   carregandoTexto,
+  paginas = [],
+  paginaIdInicial = "",
 }: {
   acao: (estado: EstadoAcao, formData: FormData) => Promise<EstadoAcao>;
   valoresIniciais?: ValoresIniciaisPost;
   rotuloBotao: string;
   carregandoTexto: string;
+  // Páginas do LinkedIn em que dá pra publicar (cadastradas em Configurações).
+  paginas?: PaginaLinkedin[];
+  // Página já escolhida (edição) ou a única existente; vazio força a escolha.
+  paginaIdInicial?: string;
 }) {
   const [estado, formAction] = useActionState(acao, null);
   const [texto, setTexto] = useState(valoresIniciais?.texto ?? "");
@@ -91,6 +99,26 @@ export function FormularioPost({
     <form action={formAction} className="space-y-5">
       {valoresIniciais && (
         <input type="hidden" name="id" value={valoresIniciais.id} />
+      )}
+
+      {paginas.length > 0 && (
+        <Campo label="Publicar em">
+          <select
+            name="pagina_id"
+            required
+            defaultValue={paginaIdInicial}
+            className={classesCampo}
+          >
+            <option value="" disabled>
+              Escolha a página do LinkedIn...
+            </option>
+            {paginas.map((pagina) => (
+              <option key={pagina.id} value={pagina.id}>
+                {pagina.nome}
+              </option>
+            ))}
+          </select>
+        </Campo>
       )}
 
       <Campo

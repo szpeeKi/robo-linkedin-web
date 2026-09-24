@@ -10,6 +10,9 @@ import {
   TAMANHO_MAXIMO_IMAGEM,
   TAMANHO_MAXIMO_VIDEO,
 } from "@/lib/constantes";
+import { montarUrlAdminDaPagina } from "@/lib/paginas";
+
+type ClienteSupabase = Awaited<ReturnType<typeof createSupabaseServerClient>>;
 
 export type EstadoAcao = { erro?: string; sucesso?: string } | null;
 
@@ -78,15 +81,55 @@ export async function prepararUploadDeMidia(dados: {
 // escolhido (ver prepararUploadDeMidia). O nome do campo/coluna ficou
 // "imagem_url" de quando só havia foto: o robô já instalado lê essa coluna, e
 // renomear quebraria ele.
+//
+// A página em que o post sai (quando o time tem mais de uma) vem do formulário
+// só como o id da lista de páginas; nome e endereço são buscados aqui no
+// servidor, então ninguém consegue mandar um endereço qualquer pro robô abrir.
 async function lerCamposDoFormulario(
-  formData: FormData
+  formData: FormData,
+  supabase: ClienteSupabase
 ): Promise<
-  { erro: string } | { texto: string; imagemUrl: string; agendadoParaUtc: Date }
+  | { erro: string }
+  | {
+      texto: string;
+      imagemUrl: string;
+      agendadoParaUtc: Date;
+      paginaNome: string | null;
+      paginaAdminUrl: string | null;
+    }
 > {
   const texto = String(formData.get("texto") ?? "").trim();
   const imagemUrl = String(formData.get("imagem_url") ?? "").trim();
   const dataAgendada = String(formData.get("data_agendada") ?? "");
   const horaAgendada = String(formData.get("hora_agendada") ?? "");
+  const paginaId = String(formData.get("pagina_id") ?? "");
+
+  let paginaNome: string | null = null;
+  let paginaAdminUrl: string | null = null;
+  if (paginaId) {
+    const { data: pagina } = await supabase
+      .from("linkedin_paginas")
+      .select("nome, admin_url")
+      .eq("id", paginaId)
+      .maybeSingle();
+    if (!pagina) {
+      return {
+        erro: "Essa página não está mais na lista. Atualize a página e escolha de novo.",
+      };
+    }
+    paginaNome = pagina.nome;
+    paginaAdminUrl = pagina.admin_url;
+  } else {
+    // Sem página escolhida só vale se a lista estiver vazia (aí o robô usa a
+    // página padrão dele). Com páginas cadastradas, a escolha é obrigatória.
+    const { data: existentes } = await supabase
+      .from("linkedin_paginas")
+      .select("id")
+      .limit(1);
+    if (existentes?.length) {
+      return { erro: "Escolha em qual página do LinkedIn o post vai sair." };
+    }
+  }
 
   if (!texto) {
     return { erro: "Escreva o texto do post antes de salvar." };
@@ -112,7 +155,7 @@ async function lerCamposDoFormulario(
     return { erro: "Escolha um horário no futuro — esse já passou." };
   }
 
-  return { texto, imagemUrl, agendadoParaUtc };
+  return { texto, imagemUrl, agendadoParaUtc, paginaNome, paginaAdminUrl };
 }
 
 // Cria um novo post agendado. Só funciona pra quem está logado (a policy de RLS
@@ -128,12 +171,14 @@ export async function criarPost(
     return { erro: "Sua sessão expirou. Atualize a página e entre de novo." };
   }
 
-  const campos = await lerCamposDoFormulario(formData);
+  const campos = await lerCamposDoFormulario(formData, supabase);
   if ("erro" in campos) return campos;
 
   const { error } = await supabase.from("linkedin_posts_agendados").insert({
     texto: campos.texto,
     imagem_url: campos.imagemUrl || null,
+    pagina_nome: campos.paginaNome,
+    pagina_admin_url: campos.paginaAdminUrl,
     agendado_para: campos.agendadoParaUtc.toISOString(),
     criado_por: userData.user.email ?? "desconhecido",
   });
@@ -165,7 +210,7 @@ export async function editarPost(
     return { erro: "Post inválido." };
   }
 
-  const campos = await lerCamposDoFormulario(formData);
+  const campos = await lerCamposDoFormulario(formData, supabase);
   if ("erro" in campos) return campos;
 
   const { error, count } = await supabase
@@ -174,6 +219,8 @@ export async function editarPost(
       {
         texto: campos.texto,
         imagem_url: campos.imagemUrl || null,
+        pagina_nome: campos.paginaNome,
+        pagina_admin_url: campos.paginaAdminUrl,
         agendado_para: campos.agendadoParaUtc.toISOString(),
       },
       { count: "exact" }
@@ -220,6 +267,95 @@ export async function apagarPost(
 
   revalidatePath("/");
   return { sucesso: "Post cancelado." };
+}
+
+// Cadastra uma página do LinkedIn na lista de páginas em que dá pra publicar. O
+// nome precisa ser IGUAL ao da página no LinkedIn: o robô confere esse nome na
+// caixa de publicação e desiste se não bater (pra não postar na página errada).
+export async function adicionarPaginaLinkedin(
+  _estadoAnterior: EstadoAcao,
+  formData: FormData
+): Promise<EstadoAcao> {
+  const supabase = await createSupabaseServerClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) {
+    return { erro: "Sua sessão expirou. Atualize a página e entre de novo." };
+  }
+
+  const nome = String(formData.get("nome") ?? "").trim();
+  const link = String(formData.get("link") ?? "");
+
+  if (!nome) {
+    return { erro: "Escreva o nome da página, igual ao que aparece no LinkedIn." };
+  }
+  const adminUrl = montarUrlAdminDaPagina(link);
+  if (!adminUrl) {
+    return {
+      erro: "Não entendi o link. Cole o endereço da página, tipo https://www.linkedin.com/company/nome-da-pagina/",
+    };
+  }
+
+  const { error } = await supabase.from("linkedin_paginas").insert({
+    nome,
+    admin_url: adminUrl,
+    criado_por: userData.user.email ?? "desconhecido",
+  });
+
+  if (error) {
+    return {
+      erro: error.code === "23505"
+        ? "Essa página já está na lista."
+        : `Não consegui salvar a página: ${error.message}`,
+    };
+  }
+
+  revalidatePath("/configuracoes");
+  revalidatePath("/novo");
+  return { sucesso: `Página "${nome}" adicionada.` };
+}
+
+// Tira uma página da lista. Não deixa se ainda houver posts pendentes marcados
+// pra ela (senão ficariam sem dono na hora de editar); posts já publicados
+// guardam uma cópia do nome e do endereço, então não são afetados.
+export async function removerPaginaLinkedin(
+  _estadoAnterior: EstadoAcao,
+  formData: FormData
+): Promise<EstadoAcao> {
+  const supabase = await createSupabaseServerClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) {
+    return { erro: "Sua sessão expirou. Atualize a página e entre de novo." };
+  }
+
+  const id = String(formData.get("id") ?? "");
+  if (!id) return null;
+
+  const { data: pagina } = await supabase
+    .from("linkedin_paginas")
+    .select("admin_url")
+    .eq("id", id)
+    .maybeSingle();
+  if (!pagina) return { sucesso: "Página já tinha sido removida." };
+
+  const { count } = await supabase
+    .from("linkedin_posts_agendados")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "pendente")
+    .eq("pagina_admin_url", pagina.admin_url);
+  if (count) {
+    return {
+      erro: `Tem ${count} post${count > 1 ? "s" : ""} pendente${count > 1 ? "s" : ""} nessa página. Exclua ou edite antes de remover.`,
+    };
+  }
+
+  const { error } = await supabase.from("linkedin_paginas").delete().eq("id", id);
+  if (error) {
+    return { erro: `Não consegui remover: ${error.message}` };
+  }
+
+  revalidatePath("/configuracoes");
+  revalidatePath("/novo");
+  return { sucesso: "Página removida." };
 }
 
 // Grava (ou substitui) a credencial do LinkedIn usada pelo robô.

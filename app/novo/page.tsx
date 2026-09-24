@@ -3,8 +3,18 @@ import { NavBar } from "@/components/NavBar";
 import { FormularioPost } from "@/components/FormularioPost";
 import { IconeSeta } from "@/components/icones";
 import { criarPost } from "@/lib/actions";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
 
-export default function NovoPostPage() {
+// A lista de páginas muda em Configurações, então não pode ficar em cache.
+export const dynamic = "force-dynamic";
+
+export default async function NovoPostPage() {
+  const supabase = await createSupabaseServerClient();
+  const { data: paginas } = await supabase
+    .from("linkedin_paginas")
+    .select("id, nome")
+    .order("nome");
+
   return (
     <div className="min-h-screen bg-gray-50">
       <NavBar />
@@ -31,6 +41,9 @@ export default function NovoPostPage() {
             acao={criarPost}
             rotuloBotao="Agendar post"
             carregandoTexto="Agendando..."
+            paginas={paginas ?? []}
+            // Com uma página só, já vem escolhida; com várias, o time escolhe.
+            paginaIdInicial={paginas?.length === 1 ? paginas[0].id : ""}
           />
         </div>
       </main>
