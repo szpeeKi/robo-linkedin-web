@@ -171,6 +171,33 @@ master` — o Netlify pega sozinho. Confirmar com
   posts REAIS pendentes do marketing pelo perfil de teste; nunca rode `main.py`
   com `SIMULAR_SEM_PUBLICAR=false` em dev sem essa guarda). Só compilados, não
   testados com login: a tela de "Tentar de novo" e o aviso na fila.
+- **LinkedIn POR PESSOA do time (24/09/2026)**: antes havia UMA credencial global
+  (`linkedin_credenciais` com uma linha só; salvar em qualquer login sobrescrevia
+  e a tela mostrava sempre a mais recente) — Wallace e Manuela viam o mesmo
+  LinkedIn. Agora cada login do app conecta o seu: `linkedin_credenciais.usuario_email`
+  (único), funções `definir_credencial_linkedin_usuario` /
+  `obter_credencial_linkedin_usuario` (só `service_role` executa — conferir os
+  grants se recriar; a troca apaga o segredo antigo do Vault). Configurações
+  mostra/salva só a de quem está logado; "Novo post" avisa e `criarPost` recusa
+  se a pessoa não conectou (`lib/credenciais.ts`, arquivo comum — NÃO mover pra
+  `lib/actions.ts`, tudo que um arquivo "use server" exporta vira endpoint).
+  Robô: cada post usa a credencial de `criado_por` (sem credencial → o post vira
+  `erro` com mensagem clara; nunca usa a de outra pessoa) e a sessão do navegador
+  é POR CONTA (`sessao_linkedin_<hash do e-mail do LinkedIn>.json`,
+  `caminho_da_sessao`) — o `sessao_linkedin.json` antigo não é mais usado. Uma
+  conta que pede verificação só pausa os posts DELA na rodada; o alerta do robô
+  ganhou prefixo `[login-do-app]` e só a própria pessoa o limpa ao publicar
+  (`limpar_alerta_de`). ⚠️ Cada pessoa precisa (a) conectar o LinkedIn em
+  Configurações, (b) ser ADMIN das páginas em que vai postar e (c) na 1ª
+  publicação de cada conta o Edge abre visível e o LinkedIn pode pedir
+  verificação (uma vez por conta). A linha antiga (`APPLICATION.MANUU@GMAIL.COM`,
+  salva pelo login do wallace) ficou SEM dono (`usuario_email` nulo) porque não
+  dava pra saber de quem era: só os robôs ANTIGOS ainda instalados a usam
+  (`obter_credencial_linkedin`, legado). Também foram apagadas 7 senhas velhas
+  órfãs do Vault (a função antiga deixava uma nova a cada salvamento). Testado
+  no banco real + robô (simulação): uma credencial por pessoa, troca sem
+  interferir na do outro, `criado_por` → credencial certa, alertas por pessoa.
+  Só compilada, não testada com login: a tela de Configurações/Novo post.
 - **Seletor de página por post** (24/09/2026): o marketing administra várias
   páginas (a conta tem "Minhas páginas (3)": InovaComm, OpenBox Brasil e mais
   uma), então cada post escolhe a página. Tabela `linkedin_paginas` (id, nome,
