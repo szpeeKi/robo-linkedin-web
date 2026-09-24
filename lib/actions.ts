@@ -11,6 +11,7 @@ import {
   TAMANHO_MAXIMO_VIDEO,
 } from "@/lib/constantes";
 import { montarUrlAdminDaPagina } from "@/lib/paginas";
+import { linkedinConectado } from "@/lib/credenciais";
 
 type ClienteSupabase = Awaited<ReturnType<typeof createSupabaseServerClient>>;
 
@@ -169,6 +170,15 @@ export async function criarPost(
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) {
     return { erro: "Sua sessão expirou. Atualize a página e entre de novo." };
+  }
+
+  // O robô publica com o LinkedIn de quem criou o post, então só dá pra agendar
+  // depois de conectar o próprio LinkedIn em Configurações.
+  const conectado = await linkedinConectado(userData.user.email);
+  if (!conectado) {
+    return {
+      erro: "Antes de agendar, conecte o seu LinkedIn em Configurações. Os posts saem com a conta de quem os agenda.",
+    };
   }
 
   const campos = await lerCamposDoFormulario(formData, supabase);
@@ -361,10 +371,13 @@ export async function removerPaginaLinkedin(
   return { sucesso: "Página removida." };
 }
 
-// Grava (ou substitui) a credencial do LinkedIn usada pelo robô.
+// Grava (ou substitui) a credencial do LinkedIn DE QUEM ESTÁ LOGADO no app: cada
+// pessoa do time conecta o próprio LinkedIn, e os posts que ela agenda saem com
+// a conta dela (o robô procura a credencial pelo "criado_por" do post).
 // Usa a service_role key (createSupabaseAdminClient) só aqui dentro, no servidor —
 // essa chave nunca é exposta ao navegador. A senha em si nunca fica em texto puro:
-// a função "definir_credencial_linkedin" guarda ela criptografada no Supabase Vault.
+// a função "definir_credencial_linkedin_usuario" guarda ela criptografada no
+// Supabase Vault.
 export async function salvarCredencialLinkedin(
   _estadoAnterior: EstadoAcao,
   formData: FormData
@@ -383,10 +396,15 @@ export async function salvarCredencialLinkedin(
   }
 
   const admin = createSupabaseAdminClient();
-  const { error } = await admin.rpc("definir_credencial_linkedin", {
+  const usuario = userData.user.email;
+  if (!usuario) {
+    return { erro: "Sua conta do app não tem e-mail, então não dá pra guardar o LinkedIn nela." };
+  }
+
+  const { error } = await admin.rpc("definir_credencial_linkedin_usuario", {
+    p_usuario: usuario,
     p_email: email,
     p_senha: senha,
-    p_atualizado_por: userData.user.email ?? "desconhecido",
   });
 
   if (error) {
@@ -394,5 +412,8 @@ export async function salvarCredencialLinkedin(
   }
 
   revalidatePath("/configuracoes");
-  return { sucesso: "Credencial salva! O robô já vai usar essa conta a partir de agora." };
+  return {
+    sucesso:
+      "LinkedIn conectado! Os posts que você agendar vão sair com essa conta.",
+  };
 }

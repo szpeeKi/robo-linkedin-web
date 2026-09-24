@@ -3,6 +3,7 @@ import { NavBar } from "@/components/NavBar";
 import { FormularioPost } from "@/components/FormularioPost";
 import { IconeSeta } from "@/components/icones";
 import { criarPost } from "@/lib/actions";
+import { linkedinConectado } from "@/lib/credenciais";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 // A lista de páginas muda em Configurações, então não pode ficar em cache.
@@ -14,6 +15,9 @@ export default async function NovoPostPage() {
     .from("linkedin_paginas")
     .select("id, nome")
     .order("nome");
+
+  const { data: userData } = await supabase.auth.getUser();
+  const conectado = await linkedinConectado(userData.user?.email);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -36,6 +40,20 @@ export default async function NovoPostPage() {
             Escreva o post, escolha quando ele deve sair e deixe o resto com a
             gente. Ele fica na fila até a hora certa.
           </p>
+
+          {!conectado && (
+            <div className="mb-6 rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800">
+              Você ainda não conectou o seu LinkedIn. Os posts saem com a conta de
+              quem os agenda, então{" "}
+              <Link
+                href="/configuracoes"
+                className="font-medium underline underline-offset-2"
+              >
+                conecte o seu em Configurações
+              </Link>{" "}
+              antes de agendar.
+            </div>
+          )}
 
           <FormularioPost
             acao={criarPost}
