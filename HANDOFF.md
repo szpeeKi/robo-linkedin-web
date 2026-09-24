@@ -162,6 +162,24 @@ Duas mudanças grandes hoje:
 - **Não empacota mais o Chromium do Playwright** (usa o Edge do sistema,
   ver seção do robô acima).
 
+**Instalador de TESTE (24/09/2026)** — pra testar o robô no PC do marketing
+sem postar de verdade: `ISCC.exe /DTESTE setup.iss` gera
+`instalador\saida\Instalar-Posts-LinkedIn-TESTE.exe` (nome do app com
+"(TESTE - nao publica)"), igual ao de produção mas com o `.env`
+`instalador\robo-teste.env` (cópia do `robo.env` com
+`SIMULAR_SEM_PUBLICAR = true`). No modo simulação o robô abre a caixa (como
+página, se `LINKEDIN_PAGINA_ADMIN_URL` estiver preenchida), escreve o texto,
+anexa a mídia e PARA antes de clicar em Publicar: salva `simulacao.png` na
+pasta `robo` da instalação e marca o post como **erro** na fila (mensagem
+"SIMULAÇÃO: ...") de propósito, pra ele não sair de verdade depois. Mesmo
+AppId/pasta do de produção, então instalar o de produção por cima substitui
+o de teste. ⚠️ Enquanto o de teste estiver instalado, NENHUM post é
+publicado. Para regerar o `robo-teste.env` depois de mudar o `robo.env`,
+troque a linha `SIMULAR_SEM_PUBLICAR` por `true` na cópia. O
+`ultimo_erro.png` e o `simulacao.png` são excluídos do instalador (Excludes no
+`setup.iss`). A instalação do instalador de TESTE em si não foi testada (a máquina
+de desenvolvimento já tem tarefa agendada/registro de instalação desse AppId).
+
 **Como recompilar** depois de mexer em `desktop-src` ou `robo-src`:
 ```powershell
 cd instalador
